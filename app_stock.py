@@ -1,3 +1,11 @@
+# cd C:/xampp/htdocs/
+# pyinstaller --onefile --windowed app_stock.py
+# git add .
+# git commit -m "Versión 1.2: [describe los cambios, ej: Añadido puerto personalizado]"
+# git push
+# git add version.txt
+# git commit -m "Actualización de versión a 1.2"
+# git push
 import mysql.connector
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -17,9 +25,8 @@ ctk.set_default_color_theme("blue")  # Tema azul (opciones: blue, dark-blue, gre
 APP_VERSION = "1.1"  # Actualiza esto cada vez que hagas cambios
 
 # URL para chequeo de actualizaciones (sube un 'version.txt' con el número de versión y 'app_stock.exe' a un servidor o GitHub)
-UPDATE_URL_VERSION = "https://tu-servidor-o-github.com/version.txt"  # Cambia esto a tu URL real
-UPDATE_URL_EXE = "https://tu-servidor-o-github.com/app_stock.exe"    # URL del nuevo .exe
-
+UPDATE_URL_VERSION = "https://raw.githubusercontent.com/reca1338a-wq/stock/main/version.txt"
+UPDATE_URL_EXE = "https://github.com/reca1338a-wq/stock/releases/latest/download/app_stock.exe"
 # Archivo de configuración
 CONFIG_FILE = "config.ini"
 
@@ -92,7 +99,9 @@ if not db_config:
     config_window.mainloop()
     db_config = load_config()
 
+# Añadimos el puerto fijo aquí
 DB_CONFIG = dict(db_config)
+DB_CONFIG['port'] = 48216  # Puerto personalizado para MySQL
 
 def conectar_db():
     try:
