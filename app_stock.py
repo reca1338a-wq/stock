@@ -22,7 +22,7 @@ ctk.set_appearance_mode("Dark")  # Tema oscuro (cambia a "Light" si prefieres cl
 ctk.set_default_color_theme("blue")  # Tema azul (opciones: blue, dark-blue, green)
 
 # Versión actual de la app
-APP_VERSION = "1.1"  # Actualiza esto cada vez que hagas cambios
+APP_VERSION = "0.0.0.4"  # Actualiza esto cada vez que hagas cambios
 
 # URL para chequeo de actualizaciones (sube un 'version.txt' con el número de versión y 'app_stock.exe' a un servidor o GitHub)
 UPDATE_URL_VERSION = "https://raw.githubusercontent.com/reca1338a-wq/stock/main/version.txt"
@@ -55,9 +55,9 @@ def load_config():
     else:
         return None
 
-def save_config(host, user, password, database):
+def save_config(host, user, password, database, port):
     config = configparser.ConfigParser()
-    config['DB'] = {'host': host, 'user': user, 'password': password, 'database': database}
+    config['DB'] = {'host': host, 'user': user, 'password': password, 'database': database, 'port': port}
     with open(CONFIG_FILE, 'w') as configfile:
         config.write(configfile)
 
@@ -67,41 +67,47 @@ if not db_config:
     # Ventana para configurar BD si no existe config
     config_window = ctk.CTk()
     config_window.title("Configurar BD")
-    config_window.geometry("400x300")
+    config_window.geometry("400x350")
     config_window.resizable(True, True)
 
-    ctk.CTkLabel(config_window, text="Host (ej: localhost o IP remota):").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+    ctk.CTkLabel(config_window, text="Host (ej: 192.168.1.131):").grid(row=0, column=0, padx=10, pady=5, sticky="w")
     entry_host = ctk.CTkEntry(config_window)
     entry_host.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
-    entry_host.insert(0, "localhost")
+    entry_host.insert(0, "192.168.1.131")
 
-    ctk.CTkLabel(config_window, text="Usuario:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    ctk.CTkLabel(config_window, text="Puerto (ej: 48216):").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    entry_port = ctk.CTkEntry(config_window)
+    entry_port.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+    entry_port.insert(0, "48216")
+
+    ctk.CTkLabel(config_window, text="Usuario:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
     entry_user = ctk.CTkEntry(config_window)
-    entry_user.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
-    entry_user.insert(0, "root")
+    entry_user.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+    entry_user.insert(0, "root")  # Cambia si usas otro por defecto
 
-    ctk.CTkLabel(config_window, text="Contraseña:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    ctk.CTkLabel(config_window, text="Contraseña:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
     entry_password = ctk.CTkEntry(config_window, show="*")
-    entry_password.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+    entry_password.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
 
-    ctk.CTkLabel(config_window, text="Base de datos:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+    ctk.CTkLabel(config_window, text="Base de datos:").grid(row=4, column=0, padx=10, pady=5, sticky="w")
     entry_database = ctk.CTkEntry(config_window)
-    entry_database.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+    entry_database.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
     entry_database.insert(0, "stockalmacen")
 
     def save_and_close():
-        save_config(entry_host.get(), entry_user.get(), entry_password.get(), entry_database.get())
+        save_config(entry_host.get(), entry_user.get(), entry_password.get(), entry_database.get(), entry_port.get())
         config_window.destroy()
 
-    ctk.CTkButton(config_window, text="Guardar Configuración", command=save_and_close).grid(row=4, column=0, columnspan=2, pady=20, sticky="ew")
+    ctk.CTkButton(config_window, text="Guardar Configuración", command=save_and_close).grid(row=5, column=0, columnspan=2, pady=20, sticky="ew")
 
     config_window.columnconfigure(1, weight=1)
     config_window.mainloop()
     db_config = load_config()
 
-# Añadimos el puerto fijo aquí
 DB_CONFIG = dict(db_config)
-DB_CONFIG['port'] = 48216  # Puerto personalizado para MySQL
+# Asegurar puerto por defecto si no está en config
+if 'port' not in DB_CONFIG:
+    DB_CONFIG['port'] = '48216'
 
 def conectar_db():
     try:
@@ -315,6 +321,10 @@ texto_datos = ctk.CTkTextbox(scrollable_frame, font=("Arial", 12))
 texto_datos.grid(row=0, column=0, sticky="nsew")
 
 ctk.CTkButton(frame_datos, text="Mostrar Datos", command=mostrar_datos, height=40).grid(row=2, column=0, pady=10, sticky="ew")
+
+# Añadir la etiqueta de versión abajo a la izquierda
+version_label = ctk.CTkLabel(ventana, text=f"Versión {APP_VERSION}", font=("Arial", 10), text_color="gray")
+version_label.grid(row=1, column=0, sticky="sw", padx=10, pady=5)
 
 # Iniciar app
 ventana.mainloop()
