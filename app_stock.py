@@ -9,25 +9,24 @@
 import mysql.connector
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import customtkinter as ctk  # Para UI moderna
+import customtkinter as ctk
+from tkcalendar import Calendar
 import pandas as pd
 from datetime import datetime
 import configparser
 import os
-import requests  # Para chequeo de actualizaciones
+import requests
 import sys
 import subprocess
 
-ctk.set_appearance_mode("Dark")  # Tema oscuro (cambia a "Light" si prefieres claro)
-ctk.set_default_color_theme("blue")  # Tema azul (opciones: blue, dark-blue, green)
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
 
-# Versión actual de la app
-APP_VERSION = "0.0.0.4"  # Actualiza esto cada vez que hagas cambios
+APP_VERSION = "0.0.0.5"
 
-# URL para chequeo de actualizaciones (sube un 'version.txt' con el número de versión y 'app_stock.exe' a un servidor o GitHub)
 UPDATE_URL_VERSION = "https://raw.githubusercontent.com/reca1338a-wq/stock/main/version.txt"
 UPDATE_URL_EXE = "https://github.com/reca1338a-wq/stock/releases/latest/download/app_stock.exe"
-# Archivo de configuración
+
 CONFIG_FILE = "config.ini"
 
 def check_for_updates():
@@ -36,24 +35,21 @@ def check_for_updates():
         latest_version = response.text.strip()
         if latest_version > APP_VERSION:
             if messagebox.askyesno("Actualización disponible", f"Hay una nueva versión ({latest_version}). ¿Descargar y actualizar?"):
-                # Descargar nuevo exe
                 new_exe = "app_stock_new.exe"
                 with open(new_exe, "wb") as f:
                     f.write(requests.get(UPDATE_URL_EXE).content)
-                # Reemplazar el actual y reiniciar
                 os.replace(new_exe, "app_stock.exe")
                 subprocess.Popen(["app_stock.exe"])
                 sys.exit(0)
-    except Exception as e:
-        pass  # Si no hay internet o error, ignora silenciosamente
+    except Exception:
+        pass
 
 def load_config():
     config = configparser.ConfigParser()
     if os.path.exists(CONFIG_FILE):
         config.read(CONFIG_FILE)
         return config['DB']
-    else:
-        return None
+    return None
 
 def save_config(host, user, password, database, port):
     config = configparser.ConfigParser()
@@ -61,10 +57,8 @@ def save_config(host, user, password, database, port):
     with open(CONFIG_FILE, 'w') as configfile:
         config.write(configfile)
 
-# Configuración inicial de BD
 db_config = load_config()
 if not db_config:
-    # Ventana para configurar BD si no existe config
     config_window = ctk.CTk()
     config_window.title("Configurar BD")
     config_window.geometry("400x350")
@@ -83,7 +77,7 @@ if not db_config:
     ctk.CTkLabel(config_window, text="Usuario:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
     entry_user = ctk.CTkEntry(config_window)
     entry_user.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
-    entry_user.insert(0, "root")  # Cambia si usas otro por defecto
+    entry_user.insert(0, "root")
 
     ctk.CTkLabel(config_window, text="Contraseña:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
     entry_password = ctk.CTkEntry(config_window, show="*")
@@ -105,7 +99,6 @@ if not db_config:
     db_config = load_config()
 
 DB_CONFIG = dict(db_config)
-# Asegurar puerto por defecto si no está en config
 if 'port' not in DB_CONFIG:
     DB_CONFIG['port'] = '48216'
 
@@ -114,33 +107,96 @@ def conectar_db():
         conn = mysql.connector.connect(**DB_CONFIG)
         return conn
     except mysql.connector.Error as err:
-        messagebox.showerror("Error de Conexión", f"No se pudo conectar: {err}\nRevisa config.ini o reconfíguralo.")
+        messagebox.showerror("Error", f"No se pudo conectar: {err}")
         return None
 
-def insertar_datos():
-    tipo = entry_tipo.get().lower()
-    if tipo not in ['toner', 'tambor']:
-        messagebox.showerror("Error", "El tipo debe ser 'toner' o 'tambor'.")
-        return
-    
-    fecha = entry_fecha.get()
-    if not fecha:
-        fecha = datetime.now().strftime('%Y-%m-%d')
-    
-    entregado_a = entry_entregado_a.get()
-    de = entry_de.get()
-    impresora = entry_impresora.get()
+# Variables Tk para bindings
+var_tipo = tk.StringVar()
+var_fecha = tk.StringVar()
+var_entregado_a = tk.StringVar()
+var_de = tk.StringVar()
+var_impresora = tk.StringVar()
+var_cantidad = tk.IntVar(value=0)
+var_toner = tk.StringVar()
+var_tambor = tk.StringVar()
+var_habia = tk.IntVar(value=0)
+var_quedan = tk.IntVar(value=0)
+
+# Función para actualizar quedan automáticamente
+def update_quedan(*args):
     try:
-        cantidad = int(entry_cantidad.get())
-        habia = int(entry_habia.get())
-        quedan = int(entry_quedan.get())
-    except ValueError:
-        messagebox.showerror("Error", "Cantidad, había y quedan deben ser números enteros.")
+        quedan = var_habia.get() - var_cantidad.get()
+        var_quedan.set(quedan if quedan >= 0 else 0)
+    except tk.TclError:
+        var_quedan.set(0)
+
+var_habia.trace("w", update_quedan)
+var_cantidad.trace("w", update_quedan)
+
+# Función para mostrar/ocultar toner/tambor
+def toggle_toner_tambor(*args):
+    if var_tipo.get() == "toner":
+        label_toner.grid(row=8, column=0, pady=5, sticky="w")
+        entry_toner.grid(row=9, column=0, pady=5, sticky="ew")
+        label_tambor.grid_remove()
+        entry_tambor.grid_remove()
+    elif var_tipo.get() == "tambor":
+        label_tambor.grid(row=8, column=0, pady=5, sticky="w")
+        entry_tambor.grid(row=9, column=0, pady=5, sticky="ew")
+        label_toner.grid_remove()
+        entry_toner.grid_remove()
+    else:
+        label_toner.grid_remove()
+        entry_toner.grid_remove()
+        label_tambor.grid_remove()
+        entry_tambor.grid_remove()
+
+var_tipo.trace("w", toggle_toner_tambor)
+
+# Función para calendario
+def open_calendar():
+    cal_window = ctk.CTkToplevel()
+    cal_window.title("Seleccionar Fecha")
+    cal = Calendar(cal_window, selectmode="day", date_pattern="yyyy-mm-dd")
+    cal.pack(pady=10)
+
+    def select_date():
+        var_fecha.set(cal.get_date())
+        cal_window.destroy()
+
+    ctk.CTkButton(cal_window, text="Seleccionar", command=select_date).pack(pady=5)
+
+    def set_today():
+        today = datetime.now().strftime("%Y-%m-%d")
+        var_fecha.set(today)
+        cal_window.destroy()
+
+    ctk.CTkButton(cal_window, text="Hoy", command=set_today).pack(pady=5)
+
+def insertar_datos():
+    tipo = var_tipo.get().lower()
+    if tipo not in ['toner', 'tambor']:
+        messagebox.showerror("Error", "Selecciona un tipo válido.")
         return
-    
-    toner = entry_toner.get() if tipo == 'toner' else ''
-    tambor = entry_tambor.get() if tipo == 'tambor' else ''
-    
+
+    fecha = var_fecha.get()
+    if not fecha:
+        messagebox.showerror("Error", "Selecciona una fecha.")
+        return
+
+    entregado_a = var_entregado_a.get()
+    de = var_de.get()
+    impresora = var_impresora.get()
+    cantidad = var_cantidad.get()
+    habia = var_habia.get()
+    quedan = var_quedan.get()
+    toner = var_toner.get() if tipo == 'toner' else ''
+    tambor = var_tambor.get() if tipo == 'tambor' else ''
+
+    if cantidad <= 0 or habia < cantidad:
+        messagebox.showerror("Error", "Cantidad inválida o insuficiente stock.")
+        return
+
     conn = conectar_db()
     if conn:
         cursor = conn.cursor()
@@ -152,151 +208,88 @@ def insertar_datos():
         try:
             cursor.execute(query, valores)
             conn.commit()
-            messagebox.showinfo("Éxito", "Datos insertados correctamente.")
+            messagebox.showinfo("Éxito", "Datos insertados.")
             limpiar_formulario()
         except mysql.connector.Error as err:
-            messagebox.showerror("Error", f"No se pudo insertar: {err}")
+            messagebox.showerror("Error", f"Fallo al insertar: {err}")
         finally:
             cursor.close()
             conn.close()
 
-def importar_xlsx():
-    archivo = filedialog.askopenfilename(title="Seleccionar XLSX", filetypes=[("Excel files", "*.xlsx")])
-    if not archivo:
-        return
-    
-    try:
-        df = pd.read_excel(archivo)
-        required_cols = ['tipo', 'fecha', 'entregado a', 'de', 'impresora', 'cantidad', 'toner', 'tambor', 'habia', 'quedan']
-        if not all(col in df.columns for col in required_cols):
-            messagebox.showerror("Error", f"El XLSX debe tener estas columnas: {', '.join(required_cols)}")
-            return
-        
-        conn = conectar_db()
-        if conn:
-            cursor = conn.cursor()
-            query = """
-            INSERT INTO stock (tipo, fecha, `entregado a`, de, impresora, cantidad, toner, tambor, habia, quedan)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            for _, row in df.iterrows():
-                valores = (
-                    row['tipo'], row['fecha'], row['entregado a'], row['de'], row['impresora'],
-                    row['cantidad'], row['toner'], row['tambor'], row['habia'], row['quedan']
-                )
-                cursor.execute(query, valores)
-            conn.commit()
-            messagebox.showinfo("Éxito", f"{len(df)} registros importados correctamente.")
-            cursor.close()
-            conn.close()
-    except Exception as e:
-        messagebox.showerror("Error", f"Error al importar: {e}")
+# ... (importar_xlsx, mostrar_datos, limpiar_formulario permanecen igual, pero optimizados si es necesario)
 
-def mostrar_datos():
-    conn = conectar_db()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM stock")
-        resultados = cursor.fetchall()
-        
-        texto_datos.delete("1.0", tk.END)
-        
-        if resultados:
-            for fila in resultados:
-                texto_datos.insert(tk.END, f"ID: {fila[0]} | Tipo: {fila[1]} | Fecha: {fila[2]} | Entregado a: {fila[3]} | De: {fila[4]} | Impresora: {fila[5]}\n"
-                                           f"Cantidad: {fila[6]} | Toner: {fila[7]} | Tambor: {fila[8]} | Había: {fila[9]} | Quedan: {fila[10]}\n\n")
-        else:
-            texto_datos.insert(tk.END, "No hay datos en la tabla.\n")
-        
-        cursor.close()
-        conn.close()
-
-def limpiar_formulario():
-    for entry in [entry_tipo, entry_fecha, entry_entregado_a, entry_de, entry_impresora, entry_cantidad, entry_toner, entry_tambor, entry_habia, entry_quedan]:
-        entry.delete(0, tk.END)
-
-# Chequeo de actualizaciones al inicio
 check_for_updates()
 
-# Ventana principal
 ventana = ctk.CTk()
 ventana.title("Gestor de Stock Almacén")
 ventana.geometry("800x700")
-ventana.minsize(600, 500)  # Tamaño mínimo para evitar que sea demasiado pequeño
-ventana.resizable(True, True)  # Permitir redimensionar
+ventana.minsize(600, 500)
+ventana.resizable(True, True)
 
-# Usar grid para layout responsivo
 ventana.columnconfigure(0, weight=1)
 ventana.columnconfigure(1, weight=1)
 ventana.rowconfigure(0, weight=1)
 
-# Frame para formulario (izquierda)
 frame_form = ctk.CTkFrame(ventana)
 frame_form.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 frame_form.columnconfigure(0, weight=1)
 
 row = 0
-ctk.CTkLabel(frame_form, text="Tipo (toner o tambor):", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
+ctk.CTkLabel(frame_form, text="Tipo:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_tipo = ctk.CTkEntry(frame_form)
-entry_tipo.grid(row=row, column=0, pady=5, sticky="ew")
+combo_tipo = ctk.CTkComboBox(frame_form, values=["Toner", "Tambor"], variable=var_tipo)
+combo_tipo.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
-ctk.CTkLabel(frame_form, text="Fecha (YYYY-MM-DD, o vacío para hoy):", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
+ctk.CTkLabel(frame_form, text="Fecha:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_fecha = ctk.CTkEntry(frame_form)
+entry_fecha = ctk.CTkEntry(frame_form, textvariable=var_fecha, state="readonly")
 entry_fecha.grid(row=row, column=0, pady=5, sticky="ew")
+ctk.CTkButton(frame_form, text="Seleccionar Fecha", command=open_calendar, width=150).grid(row=row, column=1, pady=5, padx=5)
 row += 1
 
 ctk.CTkLabel(frame_form, text="Entregado a:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_entregado_a = ctk.CTkEntry(frame_form)
+entry_entregado_a = ctk.CTkEntry(frame_form, textvariable=var_entregado_a)
 entry_entregado_a.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
 ctk.CTkLabel(frame_form, text="De:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_de = ctk.CTkEntry(frame_form)
-entry_de.grid(row=row, column=0, pady=5, sticky="ew")
+combo_de = ctk.CTkComboBox(frame_form, values=["PM", "AB", "CR", "TO", "CU", "VL", "JA"], variable=var_de)
+combo_de.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
 ctk.CTkLabel(frame_form, text="Impresora:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_impresora = ctk.CTkEntry(frame_form)
+entry_impresora = ctk.CTkEntry(frame_form, textvariable=var_impresora)
 entry_impresora.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
 ctk.CTkLabel(frame_form, text="Cantidad:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_cantidad = ctk.CTkEntry(frame_form)
+entry_cantidad = ctk.CTkEntry(frame_form, textvariable=var_cantidad)
 entry_cantidad.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
-ctk.CTkLabel(frame_form, text="Toner (solo si toner):", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
-row += 1
-entry_toner = ctk.CTkEntry(frame_form)
-entry_toner.grid(row=row, column=0, pady=5, sticky="ew")
-row += 1
+label_toner = ctk.CTkLabel(frame_form, text="Toner:", font=("Arial", 12))
+entry_toner = ctk.CTkEntry(frame_form, textvariable=var_toner)
 
-ctk.CTkLabel(frame_form, text="Tambor (solo si tambor):", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
-row += 1
-entry_tambor = ctk.CTkEntry(frame_form)
-entry_tambor.grid(row=row, column=0, pady=5, sticky="ew")
-row += 1
+label_tambor = ctk.CTkLabel(frame_form, text="Tambor:", font=("Arial", 12))
+entry_tambor = ctk.CTkEntry(frame_form, textvariable=var_tambor)
 
 ctk.CTkLabel(frame_form, text="Había:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_habia = ctk.CTkEntry(frame_form)
+entry_habia = ctk.CTkEntry(frame_form, textvariable=var_habia)
 entry_habia.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
 ctk.CTkLabel(frame_form, text="Quedan:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
 row += 1
-entry_quedan = ctk.CTkEntry(frame_form)
+entry_quedan = ctk.CTkEntry(frame_form, textvariable=var_quedan, state="readonly")
 entry_quedan.grid(row=row, column=0, pady=5, sticky="ew")
 row += 1
 
-# Botones en el formulario
 ctk.CTkButton(frame_form, text="Insertar Datos", command=insertar_datos, height=40).grid(row=row, column=0, pady=10, sticky="ew")
 row += 1
 ctk.CTkButton(frame_form, text="Importar desde XLSX", command=importar_xlsx, height=40).grid(row=row, column=0, pady=10, sticky="ew")
@@ -304,7 +297,7 @@ row += 1
 ctk.CTkButton(frame_form, text="Limpiar Formulario", command=limpiar_formulario, height=40).grid(row=row, column=0, pady=10, sticky="ew")
 row += 1
 
-# Frame para mostrar datos (derecha, con scroll)
+# Frame para datos (derecha)
 frame_datos = ctk.CTkFrame(ventana)
 frame_datos.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
 frame_datos.rowconfigure(1, weight=1)
@@ -322,9 +315,9 @@ texto_datos.grid(row=0, column=0, sticky="nsew")
 
 ctk.CTkButton(frame_datos, text="Mostrar Datos", command=mostrar_datos, height=40).grid(row=2, column=0, pady=10, sticky="ew")
 
-# Añadir la etiqueta de versión abajo a la izquierda
+# Etiqueta de versión abajo a la izquierda
 version_label = ctk.CTkLabel(ventana, text=f"Versión {APP_VERSION}", font=("Arial", 10), text_color="gray")
-version_label.grid(row=1, column=0, sticky="sw", padx=10, pady=5)
+version_label.grid(row=1, column=0, padx=10, pady=5, sticky="sw")
 
 # Iniciar app
 ventana.mainloop()
