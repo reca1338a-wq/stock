@@ -22,7 +22,7 @@ import subprocess
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-APP_VERSION = "0.0.0.5"
+APP_VERSION = "0.0.0.6"
 
 UPDATE_URL_VERSION = "https://raw.githubusercontent.com/reca1338a-wq/stock/main/version.txt"
 UPDATE_URL_EXE = "https://github.com/reca1338a-wq/stock/releases/latest/download/app_stock.exe"
@@ -38,8 +38,8 @@ def check_for_updates():
                 new_exe = "app_stock_new.exe"
                 with open(new_exe, "wb") as f:
                     f.write(requests.get(UPDATE_URL_EXE).content)
-                os.replace(new_exe, "app_stock.exe")
-                subprocess.Popen(["app_stock.exe"])
+                os.replace(new_exe, sys.executable)
+                subprocess.Popen([sys.executable])
                 sys.exit(0)
     except Exception:
         pass
@@ -110,7 +110,23 @@ def conectar_db():
         messagebox.showerror("Error", f"No se pudo conectar: {err}")
         return None
 
-# Variables Tk para bindings
+# Ventana principal
+ventana = ctk.CTk()
+ventana.title("Gestor de Stock Almacén")
+ventana.geometry("800x700")
+ventana.minsize(600, 500)
+ventana.resizable(True, True)
+
+# Usar grid para layout responsivo
+ventana.columnconfigure(0, weight=1)
+ventana.columnconfigure(1, weight=1)
+ventana.rowconfigure(0, weight=1)
+ventana.rowconfigure(1, weight=0)  # Para la etiqueta de versión
+
+# Chequeo de actualizaciones al inicio
+check_for_updates()
+
+# Variables Tk para bindings (ahora después de ventana)
 var_tipo = tk.StringVar()
 var_fecha = tk.StringVar()
 var_entregado_a = tk.StringVar()
@@ -135,12 +151,12 @@ var_cantidad.trace("w", update_quedan)
 
 # Función para mostrar/ocultar toner/tambor
 def toggle_toner_tambor(*args):
-    if var_tipo.get() == "toner":
+    if var_tipo.get() == "Toner":
         label_toner.grid(row=8, column=0, pady=5, sticky="w")
         entry_toner.grid(row=9, column=0, pady=5, sticky="ew")
         label_tambor.grid_remove()
         entry_tambor.grid_remove()
-    elif var_tipo.get() == "tambor":
+    elif var_tipo.get() == "Tambor":
         label_tambor.grid(row=8, column=0, pady=5, sticky="w")
         entry_tambor.grid(row=9, column=0, pady=5, sticky="ew")
         label_toner.grid_remove()
@@ -216,23 +232,76 @@ def insertar_datos():
             cursor.close()
             conn.close()
 
-# ... (importar_xlsx, mostrar_datos, limpiar_formulario permanecen igual, pero optimizados si es necesario)
+def importar_xlsx():
+    archivo = filedialog.askopenfilename(title="Seleccionar XLSX", filetypes=[("Excel files", "*.xlsx")])
+    if not archivo:
+        return
+    
+    try:
+        df = pd.read_excel(archivo)
+        required_cols = ['tipo', 'fecha', 'entregado a', 'de', 'impresora', 'cantidad', 'toner', 'tambor', 'habia', 'quedan']
+        if not all(col in df.columns for col in required_cols):
+            messagebox.showerror("Error", f"El XLSX debe tener estas columnas: {', '.join(required_cols)}")
+            return
+        
+        conn = conectar_db()
+        if conn:
+            cursor = conn.cursor()
+            query = """
+            INSERT INTO stock (tipo, fecha, `entregado a`, de, impresora, cantidad, toner, tambor, habia, quedan)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            for _, row in df.iterrows():
+                valores = (
+                    row['tipo'], row['fecha'], row['entregado a'], row['de'], row['impresora'],
+                    row['cantidad'], row['toner'], row['tambor'], row['habia'], row['quedan']
+                )
+                cursor.execute(query, valores)
+            conn.commit()
+            messagebox.showinfo("Éxito", f"{len(df)} registros importados correctamente.")
+            cursor.close()
+            conn.close()
+    except Exception as e:
+        messagebox.showerror("Error", f"Error al importar: {e}")
 
-check_for_updates()
+def mostrar_datos():
+    conn = conectar_db()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM stock")
+        resultados = cursor.fetchall()
+        
+        texto_datos.delete("1.0", tk.END)
+        
+        if resultados:
+            for fila in resultados:
+                texto_datos.insert(tk.END, f"ID: {fila[0]} | Tipo: {fila[1]} | Fecha: {fila[2]} | Entregado a: {fila[3]} | De: {fila[4]} | Impresora: {fila[5]}\n"
+                                           f"Cantidad: {fila[6]} | Toner: {fila[7]} | Tambor: {fila[8]} | Había: {fila[9]} | Quedan: {fila[10]}\n\n")
+        else:
+            texto_datos.insert(tk.END, "No hay datos en la tabla.\n")
+        
+        cursor.close()
+        conn.close()
 
-ventana = ctk.CTk()
-ventana.title("Gestor de Stock Almacén")
-ventana.geometry("800x700")
-ventana.minsize(600, 500)
-ventana.resizable(True, True)
+def limpiar_formulario():
+    var_tipo.set("")
+    var_fecha.set("")
+    var_entregado_a.set("")
+    var_de.set("")
+    var_impresora.set("")
+    var_cantidad.set(0)
+    var_toner.set("")
+    var_tambor.set("")
+    var_habia.set(0)
+    var_quedan.set(0)
+    toggle_toner_tambor()
 
-ventana.columnconfigure(0, weight=1)
-ventana.columnconfigure(1, weight=1)
-ventana.rowconfigure(0, weight=1)
-
+# Frame para formulario (izquierda)
 frame_form = ctk.CTkFrame(ventana)
 frame_form.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 frame_form.columnconfigure(0, weight=1)
+frame_form.columnconfigure(1, weight=1)  # Para botones al lado de fecha
+frame_form.rowconfigure(tuple(range(20)), weight=1)  # Hace responsivo vertical
 
 row = 0
 ctk.CTkLabel(frame_form, text="Tipo:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
@@ -245,7 +314,7 @@ ctk.CTkLabel(frame_form, text="Fecha:", font=("Arial", 12)).grid(row=row, column
 row += 1
 entry_fecha = ctk.CTkEntry(frame_form, textvariable=var_fecha, state="readonly")
 entry_fecha.grid(row=row, column=0, pady=5, sticky="ew")
-ctk.CTkButton(frame_form, text="Seleccionar Fecha", command=open_calendar, width=150).grid(row=row, column=1, pady=5, padx=5)
+ctk.CTkButton(frame_form, text="Seleccionar Fecha", command=open_calendar, width=150).grid(row=row, column=1, pady=5, padx=5, sticky="w")
 row += 1
 
 ctk.CTkLabel(frame_form, text="Entregado a:", font=("Arial", 12)).grid(row=row, column=0, pady=5, sticky="w")
@@ -319,5 +388,4 @@ ctk.CTkButton(frame_datos, text="Mostrar Datos", command=mostrar_datos, height=4
 version_label = ctk.CTkLabel(ventana, text=f"Versión {APP_VERSION}", font=("Arial", 10), text_color="gray")
 version_label.grid(row=1, column=0, padx=10, pady=5, sticky="sw")
 
-# Iniciar app
 ventana.mainloop()
